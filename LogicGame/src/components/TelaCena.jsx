@@ -33,6 +33,7 @@ function ItemBloco({ id, bloco, index, desativado }) {
     transition,
     zIndex: isDragging ? 50 : 1,
     opacity: isDragging ? 0.6 : 1,
+    touchAction: 'none', // Evita o comportamento padrão de toque durante o arrasto
   };
 
   return (
