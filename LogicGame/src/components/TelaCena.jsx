@@ -259,8 +259,8 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
           </p>
         </div>
 
-        {/* Área de blocos arrastáveis */}
-        <div className={`p-2.5 rounded-lg border flex flex-col my-2 transition-all h-48 md:h-auto md:flex-1 overflow-hidden ${
+        {/* Área de blocos arrastáveis (Totalmente visível e adaptável) */}
+        <div className={`p-2.5 rounded-lg border flex flex-col my-2 transition-all flex-1 min-h-[160px] max-h-[220px] md:max-h-none overflow-hidden ${
           !desafioLiberado ? 'bg-slate-950/40 border-slate-900 opacity-60' : 'bg-slate-950 border-slate-800'
         }`}>
           <div className="flex items-center justify-between mb-1.5 shrink-0">
