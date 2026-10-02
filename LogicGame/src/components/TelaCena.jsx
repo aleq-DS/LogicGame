@@ -91,6 +91,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   
   const [desafioLiberado, setDesafioLiberado] = useState(!ehVideo);
   const [tempoInicioCena] = useState(Date.now());
+  const [reproduzindoDesfecho, setReproduzindoDesfecho] = useState(false);
 
   useEffect(() => {
     if (!sessaoId) return;
@@ -203,10 +204,8 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         setIsMuted(false);
         setCurrentVideoSrc(cena.video_sucesso_url);
         setDesafioLiberado(false);
-        videoRef.current.play();
-        setTimeout(() => {
-          onProximaCena();
-        }, 4000);
+        setReproduzindoDesfecho(true); // <--- Ativa o modo desfecho
+        videoRef.current.play();       
       } else {
         setTimeout(() => {
           onProximaCena();
@@ -320,11 +319,17 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
                 ref={videoRef}
                 src={currentVideoSrc} 
                 autoPlay 
-                loop={!cena.video_sucesso_url && !cena.video_falha_url && !cena.tempo_pausa} 
+                loop={!cena.video_sucesso_url && !cena.video_falha_url && !cena.tempo_pausa && !reproduzindoDesfecho} 
                 muted={isMuted} 
                 playsInline
                 onTimeUpdate={handleTimeUpdate}
-                onEnded={handleVideoEnded}
+                onEnded={() => {
+                  if (reproduzindoDesfecho) {
+                    onProximaCena(); // Avança assim que o vídeo de desfecho acabar de falar!
+                  } else {
+                    handleVideoEnded();
+                  }
+                }}
                 className="w-full h-full object-cover"
               />
               <button 
