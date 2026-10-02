@@ -88,9 +88,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   
   const ehVideo = currentVideoSrc && (currentVideoSrc.includes('.mp4') || currentVideoSrc.includes('video') || currentVideoSrc.includes('supabase.co'));
   
-  // Se for vídeo com tempo de pausa ou vídeo geral, o desafio começa congelado (a menos que não haja vídeo)
   const [desafioLiberado, setDesafioLiberado] = useState(!ehVideo);
-
   const [tempoInicioCena] = useState(Date.now());
 
   useEffect(() => {
@@ -142,11 +140,9 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     }
   };
 
-  // Monitora o tempo do vídeo para pausar e liberar o desafio
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
 
-    // Se houver tempo de pausa configurado
     if (cena.tempo_pausa && !videoPausadoPorTempo) {
       if (videoRef.current.currentTime >= cena.tempo_pausa) {
         videoRef.current.pause();
@@ -157,7 +153,6 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     }
   };
 
-  // Caso o vídeo termine sem tempo_pausa configurado, libera o desafio
   const handleVideoEnded = () => {
     setDesafioLiberado(true);
     setFeedback('▶️ Vídeo concluído! Faça o desafio.');
@@ -201,7 +196,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
       if (cena.video_sucesso_url && videoRef.current) {
         setIsMuted(false);
         setCurrentVideoSrc(cena.video_sucesso_url);
-        setDesafioLiberado(false); // Mantém congelado durante o vídeo de sucesso
+        setDesafioLiberado(false);
         videoRef.current.play();
         setTimeout(() => {
           onProximaCena();
@@ -245,25 +240,25 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   };
 
   return (
-    <div className="w-full h-full flex bg-slate-950 text-slate-100 p-4 gap-4 overflow-hidden box-border">
+    <div className="w-full h-full flex flex-col md:flex-row bg-slate-950 text-slate-100 p-2 md:p-4 gap-3 overflow-y-auto md:overflow-hidden box-border">
       
-      {/* 1ª COLUNA (Esquerda - 30%): Enredo e Blocos de Desafio */}
-      <div className="w-[30%] h-full bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-xl overflow-hidden">
+      {/* 1ª BLOCO (Mobile: Topo / Desktop: Esquerda 30%): Enredo e Blocos de Desafio */}
+      <div className="w-full md:w-[30%] h-auto md:h-full bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-between shadow-xl shrink-0">
         <div>
-          <div className="flex justify-between items-center mb-2">
+          <div className="flex justify-between items-center mb-1.5">
             <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold">Cena {cena.numero_cena}</span>
             <span className="text-xs text-slate-400 font-mono">Tentativas: {tentativas}/3</span>
           </div>
-          <p className="text-slate-300 text-xs md:text-sm leading-relaxed mb-4 max-h-24 overflow-y-auto">
+          <p className="text-slate-300 text-xs leading-relaxed mb-3 max-h-20 overflow-y-auto">
             {cena.enredo_text || cena.enredo_texto}
           </p>
         </div>
 
-        {/* Área de blocos arrastáveis (Congelada se o vídeo estiver a rolar) */}
-        <div className={`flex-1 p-3 rounded-lg border flex flex-col overflow-hidden my-2 transition-all ${
+        {/* Área de blocos arrastáveis */}
+        <div className={`p-2.5 rounded-lg border flex flex-col my-2 transition-all h-48 md:h-auto md:flex-1 overflow-hidden ${
           !desafioLiberado ? 'bg-slate-950/40 border-slate-900 opacity-60' : 'bg-slate-950 border-slate-800'
         }`}>
-          <div className="flex items-center justify-between mb-2 shrink-0">
+          <div className="flex items-center justify-between mb-1.5 shrink-0">
             <p className="text-[11px] text-amber-400 font-mono">
               {!desafioLiberado ? '🔒 Assista ao vídeo para liberar:' : '💡 Arraste os blocos na ordem correta:'}
             </p>
@@ -283,7 +278,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         </div>
 
         {/* Feedback e Botão de Testar */}
-        <div className="space-y-2 shrink-0">
+        <div className="space-y-2 shrink-0 mt-2">
           {feedback && (
             <div className={`p-2 rounded text-[11px] text-center font-semibold ${
               bloqueado && tentativas >= 3 ? 'bg-red-950/80 border border-red-800 text-red-200' : 
@@ -310,8 +305,8 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         </div>
       </div>
 
-      {/* 2ª COLUNA (Centro - 50%): Mídia em Destaque com Botão de Som */}
-      <div className="w-[50%] h-full bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-center shadow-xl overflow-hidden">
+      {/* 2ª BLOCO (Mobile: Meio / Desktop: Centro 50%): Mídia em Destaque */}
+      <div className="w-full md:w-[50%] h-56 md:h-full bg-slate-900 border border-slate-800 rounded-xl p-2 md:p-3 flex items-center justify-center shadow-xl overflow-hidden shrink-0">
         <div className="w-full h-full rounded-lg overflow-hidden bg-black flex items-center justify-center border border-slate-800 relative">
           {ehVideo ? (
             <>
@@ -328,7 +323,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
               />
               <button 
                 onClick={() => setIsMuted(!isMuted)}
-                className="absolute top-3 right-3 z-20 px-3 py-1.5 bg-slate-900/80 hover:bg-slate-800 text-amber-400 rounded-lg border border-slate-700 text-xs font-bold shadow-lg backdrop-blur transition cursor-pointer"
+                className="absolute top-2 right-2 z-20 px-2.5 py-1 bg-slate-900/80 hover:bg-slate-800 text-amber-400 rounded-lg border border-slate-700 text-[11px] font-bold shadow-lg backdrop-blur transition cursor-pointer"
               >
                 {isMuted ? '🔇 Ativar Som' : '🔊 Som Ligado'}
               </button>
@@ -344,28 +339,28 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         </div>
       </div>
 
-      {/* 3ª COLUNA (Direita - 20%): Posicionamento da Turma ao Vivo */}
-      <div className="w-[20%] h-full bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col shadow-xl overflow-hidden">
-        <h3 className="text-xs font-bold text-amber-400 mb-3 pb-2 border-b border-slate-800 text-center">
+      {/* 3ª BLOCO (Mobile: Base / Desktop: Direita 20%): Placar ao Vivo */}
+      <div className="w-full md:w-[20%] h-36 md:h-full bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col shadow-xl overflow-hidden shrink-0">
+        <h3 className="text-xs font-bold text-amber-400 mb-2 pb-1.5 border-b border-slate-800 text-center">
           🏆 Placar da Turma
         </h3>
         
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
           {rankingRodada.length === 0 ? (
-            <p className="text-[11px] text-slate-500 italic text-center py-4">Carregando placar...</p>
+            <p className="text-[11px] text-slate-500 italic text-center py-2">Carregando placar...</p>
           ) : (
             rankingRodada.map((p, idx) => (
               <div 
                 key={p.id} 
-                className={`flex items-center justify-between p-2 rounded border text-xs ${
+                className={`flex items-center justify-between p-1.5 rounded border text-xs ${
                   p.finalizado 
                     ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-200' 
                     : 'bg-slate-950 border-slate-800 text-slate-300'
                 }`}
               >
-                <div className="flex items-center gap-2 truncate">
+                <div className="flex items-center gap-1.5 truncate">
                   <span className="font-bold text-[10px] text-slate-500">#{idx + 1}</span>
-                  <span className="text-base">{p.avatar}</span>
+                  <span className="text-sm">{p.avatar}</span>
                   <span className="font-bold truncate text-[11px]">{p.nickname}</span>
                 </div>
                 <div className="text-[10px] font-mono shrink-0 pl-1">
