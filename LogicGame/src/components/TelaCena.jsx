@@ -123,7 +123,12 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(TouchSensor, { 
+      activationConstraint: { 
+        delay: 200, // Pequeno atraso para diferenciar o toque de scroll do toque de arrastar
+        tolerance: 8  // Tolerância em pixels antes de ativar o arrasto
+      } 
+    }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
