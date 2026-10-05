@@ -64,8 +64,21 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     if (!dados) return [];
     if (Array.isArray(dados)) {
       return dados.flatMap((b, idx) => {
-        if (typeof b === 'string' && b.includes(',')) {
-          return b.split(',').map((item, subIdx) => ({ id: `bloco-${idx}-${subIdx}`, texto: item.trim() }));
+        if (typeof b === 'string') {
+          // Se contém estruturas de código Python com colchetes [], chaves {} ou parênteses () agrupados, mantém como bloco único
+          const temAgrupamento = 
+            (b.includes('[') && b.includes(']')) || 
+            (b.includes('{') && b.includes('}')) || 
+            (b.includes('(') && b.includes(')'));
+
+          if (temAgrupamento) {
+            return { id: `bloco-${idx}`, texto: b.trim() };
+          }
+
+          // Caso contrário, se tiver vírgulas normais de separação de múltiplos blocos, divide
+          if (b.includes(',')) {
+            return b.split(',').map((item, subIdx) => ({ id: `bloco-${idx}-${subIdx}`, texto: item.trim() }));
+          }
         }
         return { id: `bloco-${idx}`, texto: typeof b === 'string' ? b.trim() : String(b) };
       });
