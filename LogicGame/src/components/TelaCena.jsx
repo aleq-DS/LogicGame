@@ -65,22 +65,23 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     if (Array.isArray(dados)) {
       return dados.flatMap((b, idx) => {
         if (typeof b === 'string') {
-          // Se contém estruturas de código Python com colchetes [], chaves {} ou parênteses () agrupados, mantém como bloco único
+          const textoLimpo = b.trim();
           const temAgrupamento = 
-            (b.includes('[') && b.includes(']')) || 
-            (b.includes('{') && b.includes('}')) || 
-            (b.includes('(') && b.includes(')'));
+            (textoLimpo.includes('[') && textoLimpo.includes(']')) || 
+            (textoLimpo.includes('{') && textoLimpo.includes('}')) || 
+            (textoLimpo.includes('(') && textoLimpo.includes(')'));
 
           if (temAgrupamento) {
-            return { id: `bloco-${idx}`, texto: b.trim() };
+            return { id: `bloco-${idx}`, texto: textoLimpo };
           }
 
-          // Caso contrário, se tiver vírgulas normais de separação de múltiplos blocos, divide
-          if (b.includes(',')) {
-            return b.split(',').map((item, subIdx) => ({ id: `bloco-${idx}-${subIdx}`, texto: item.trim() }));
+          if (textoLimpo.includes(',')) {
+            return textoLimpo.split(',').map((item, subIdx) => ({ id: `bloco-${idx}-${subIdx}`, texto: item.trim() }));
           }
+
+          return { id: `bloco-${idx}`, texto: textoLimpo };
         }
-        return { id: `bloco-${idx}`, texto: typeof b === 'string' ? b.trim() : String(b) };
+        return { id: `bloco-${idx}`, texto: String(b).trim() };
       });
     }
     return [];
@@ -181,8 +182,9 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   const validarResposta = async () => {
     if (bloqueado || !desafioLiberado) return;
 
-    const usuarioTextos = blocosUsuario.map(b => b.texto);
-    const gabaritoTextos = gabaritoProcessado.map(g => g.texto);
+    // Normaliza removendo espaços duplicados para evitar falso erro
+    const usuarioTextos = blocosUsuario.map(b => b.texto.replace(/\s+/g, ' ').trim());
+    const gabaritoTextos = gabaritoProcessado.map(g => g.texto.replace(/\s+/g, ' ').trim());
     const eIgual = JSON.stringify(usuarioTextos) === JSON.stringify(gabaritoTextos);
 
     if (eIgual) {
