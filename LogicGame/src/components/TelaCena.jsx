@@ -33,7 +33,7 @@ function ItemBloco({ id, bloco, index, desativado }) {
     transition,
     zIndex: isDragging ? 50 : 1,
     opacity: isDragging ? 0.6 : 1,
-    touchAction: 'none', // Evita scroll ao arrastar no mobile
+    touchAction: 'none',
   };
 
   return (
@@ -61,7 +61,6 @@ function ItemBloco({ id, bloco, index, desativado }) {
 
 export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena }) {
   
-  // Função para processar o gabarito oficial cadastrado no Supabase
   const processarGabarito = (dados) => {
     if (!dados) return [];
     if (Array.isArray(dados)) {
@@ -73,14 +72,12 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     return [];
   };
 
-  // Algoritmo para embaralhar os blocos automaticamente de forma randômica
   const embaralharArray = (array) => {
     const arr = [...array.map((item, idx) => ({ ...item, id: `bloco-emb-${idx}` }))];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    // Garante que não venha embaralhado exatamente na ordem certa por coincidência (se houver mais de 1 item)
     if (JSON.stringify(arr.map(x => x.texto)) === JSON.stringify(array.map(x => x.texto)) && array.length > 1) {
       return embaralharArray(array);
     }
@@ -95,7 +92,12 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   const [bloqueado, setBloqueado] = useState(false);
   const [rankingRodada, setRankingRodada] = useState([]);
   
-  // Estados para controle de vídeo e tempo
+  // Controle de Tempo e Cronômetro Regressivo (15 segundos por desafio)
+  const TEMPO_LIMITE = 15;
+  const [tempoRestante, setTempoRestante] = useState(TEMPO_LIMITE);
+  const [cronometroAtivo, setCronometroAtivo] = useState(false);
+
+  // Estados de Vídeo
   const videoRef = useRef(null);
   const [currentVideoSrc, setCurrentVideoSrc] = useState(cena.imagem_url);
   const [videoPausadoPorTempo, setVideoPausadoPorTempo] = useState(false);
@@ -104,7 +106,6 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   const ehVideo = currentVideoSrc && (currentVideoSrc.includes('.mp4') || currentVideoSrc.includes('video') || currentVideoSrc.includes('supabase.co'));
   
   const [desafioLiberado, setDesafioLiberado] = useState(!ehVideo);
-  const [tempoInicioCena] = useState(Date.now());
   const [reproduzindoDesfecho, setReproduzindoDesfecho] = useState(false);
 
   useEffect(() => {
@@ -137,14 +138,55 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     };
   }, [sessaoId]);
 
+  // Ativa o cronômetro quando o desafio é liberado
+  useEffect(() => {
+    if (desafioLiberado && !bloqueado && !cronometroAtivo) {
+      setCronometroAtivo(true);
+    }
+  }, [desafioLiberado, bloqueado, cronometroAtivo]);
+
+  // Lógica do temporizador regressivo
+  useEffect(() => {
+    let timer = null;
+    if (cronometroAtivo && tempoRestante > 0 && !bloqueado) {
+      timer = setInterval(() => {
+        setTempoRestante((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            tratarTempoEsgotado();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [cronometroAtivo, tempoRestante, bloqueado]);
+
+  const tratarTempoEsgotado = () => {
+    if (bloqueado) return;
+    setBloqueado(true);
+    setCronometroAtivo(false);
+    setFeedback('⏱️ Tempo esgotado! 0 pontos nesta fase.');
+
+    if (cena.video_falha_url && videoRef.current) {
+      setIsMuted(false);
+      setCurrentVideoSrc(cena.video_falha_url);
+      setDesafioLiberado(false);
+      videoRef.current.play();
+      setTimeout(() => {
+        onProximaCena();
+      }, 4000);
+    } else {
+      setTimeout(() => {
+        onProximaCena();
+      }, 2500);
+    }
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { 
-      activationConstraint: { 
-        delay: 200, 
-        tolerance: 8 
-      } 
-    }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -182,7 +224,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   const validarResposta = async () => {
     if (bloqueado || !desafioLiberado) return;
 
-    // Compara diretamente o texto exato arrastado pelo usuário com o gabarito oficial
+    setCronometroAtivo(false);
     const usuarioTextos = blocosUsuario.map(b => b.texto);
     const gabaritoTextos = gabaritoProcessado.map(g => g.texto);
     
@@ -191,10 +233,11 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     if (eIgual) {
       setBloqueado(true);
 
-      const tempoGastoSegundos = Math.max(1, Math.floor((Date.now() - tempoInicioCena) / 1000));
-      const pontosGanhos = Math.max(10, 200 - (10 * tempoGastoSegundos));
+      // Pontuação proporcional ao tempo restante: Base 50 + (50 * tempoRestante)
+      const pontosBase = 50;
+      const pontosGanhos = pontosBase + (pontosBase * tempoRestante);
 
-      setFeedback(`🎉 Excelente! (${tempoGastoSegundos}s) +${pontosGanhos} pts. Avançando...`);
+      setFeedback(`🎉 Excelente! Restaram ${tempoRestante}s. +${pontosGanhos} pts!`);
 
       if (participanteId) {
         try {
@@ -234,8 +277,8 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
 
       if (novasTentativas >= 3) {
         setBloqueado(true);
-        setFeedback('❌ Tentativas esgotadas! Aplicando a resposta correta...');
-        // Preenche com o gabarito oficial em ordem correta
+        setCronometroAtivo(false);
+        setFeedback('❌ Tentativas esgotadas! 0 pontos nesta fase.');
         setBlocosUsuario(gabaritoProcessado.map((g, i) => ({ id: `gab-res-${i}`, texto: g.texto })));
 
         if (cena.video_falha_url && videoRef.current) {
@@ -253,6 +296,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         }
       } else {
         setFeedback(`⚠️ Ops! Sequência incorreta. Tentativa ${novasTentativas} de 3.`);
+        setCronometroAtivo(true); // Retoma o cronômetro para a nova tentativa
         if (videoRef.current && videoPausadoPorTempo) {
           videoRef.current.play();
           setVideoPausadoPorTempo(false);
@@ -264,20 +308,31 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   return (
     <div className="w-full h-full flex flex-col md:flex-row bg-slate-950 text-slate-100 p-2 md:p-4 gap-3 overflow-y-auto md:overflow-hidden box-border">
       
-      {/* 1ª COLUNA: Enredo e Blocos de Desafio */}
+      {/* 1ª COLUNA: Enredo, Cronômetro e Blocos */}
       <div className="w-full md:w-[30%] h-auto md:h-full bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-between shadow-xl shrink-0">
         <div>
           <div className="flex justify-between items-center mb-1.5">
             <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold">Cena {cena.numero_cena}</span>
             <span className="text-xs text-slate-400 font-mono">Tentativas: {tentativas}/3</span>
           </div>
-          <p className="text-slate-300 text-xs leading-relaxed mb-3 max-h-20 overflow-y-auto">
+          <p className="text-slate-300 text-xs leading-relaxed mb-2 max-h-16 overflow-y-auto">
             {cena.enredo_text || cena.enredo_texto}
           </p>
+
+          {/* Indicador Visual do Cronômetro Regressivo */}
+          {desafioLiberado && !bloqueado && (
+            <div className={`my-1.5 py-1 px-2 rounded text-xs font-mono font-bold text-center border ${
+              tempoRestante <= 5 
+                ? 'bg-red-950/60 border-red-800 text-red-400 animate-pulse' 
+                : 'bg-slate-950 border-slate-800 text-amber-400'
+            }`}>
+              ⏱️ Tempo Restante: {tempoRestante}s
+            </div>
+          )}
         </div>
 
         {/* Área de blocos arrastáveis */}
-        <div className={`p-2.5 rounded-lg border flex flex-col my-2 transition-all flex-1 min-h-[160px] max-h-[220px] md:max-h-none overflow-hidden ${
+        <div className={`p-2.5 rounded-lg border flex flex-col my-1.5 transition-all flex-1 min-h-[150px] max-h-[210px] md:max-h-none overflow-hidden ${
           !desafioLiberado ? 'bg-slate-950/40 border-slate-900 opacity-60' : 'bg-slate-950 border-slate-800'
         }`}>
           <div className="flex items-center justify-between mb-1.5 shrink-0">
