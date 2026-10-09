@@ -60,7 +60,9 @@ function ItemBloco({ id, bloco, index, desativado }) {
 }
 
 export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena }) {
-  const processarBlocos = (dados) => {
+  
+  // 1. Processa apenas os blocos embaralhados (que podem precisar de quebra por vírgula)
+  const processarBlocosEmbaralhados = (dados) => {
     if (!dados) return [];
     if (Array.isArray(dados)) {
       return dados.flatMap((b, idx) => {
@@ -72,23 +74,35 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
             (textoLimpo.includes('(') && textoLimpo.includes(')'));
 
           if (temAgrupamento) {
-            return { id: `bloco-${idx}`, texto: textoLimpo };
+            return { id: `bloco-emb-${idx}`, texto: textoLimpo };
           }
 
           if (textoLimpo.includes(',')) {
-            return textoLimpo.split(',').map((item, subIdx) => ({ id: `bloco-${idx}-${subIdx}`, texto: item.trim() }));
+            return textoLimpo.split(',').map((item, subIdx) => ({ id: `bloco-emb-${idx}-${subIdx}`, texto: item.trim() }));
           }
 
-          return { id: `bloco-${idx}`, texto: textoLimpo };
+          return { id: `bloco-emb-${idx}`, texto: textoLimpo };
         }
-        return { id: `bloco-${idx}`, texto: String(b).trim() };
+        return { id: `bloco-emb-${idx}`, texto: String(b).trim() };
       });
     }
     return [];
   };
 
-  const [blocosUsuario, setBlocosUsuario] = useState(() => processarBlocos(cena.blocos_embaralhados));
-  const gabaritoProcessado = processarBlocos(cena.gabarito);
+  // 2. Processa o gabarito de forma limpa, garantindo que cada linha do banco seja um bloco exato
+  const processarGabarito = (dados) => {
+    if (!dados) return [];
+    if (Array.isArray(dados)) {
+      return dados.map((b, idx) => ({
+        id: `gab-${idx}`,
+        texto: typeof b === 'string' ? b.trim() : String(b).trim()
+      }));
+    }
+    return [];
+  };
+
+  const [blocosUsuario, setBlocosUsuario] = useState(() => processarBlocosEmbaralhados(cena.blocos_embaralhados));
+  const gabaritoProcessado = processarGabarito(cena.gabarito);
 
   const [tentativas, setTentativas] = useState(0);
   const [feedback, setFeedback] = useState('');
