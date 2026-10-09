@@ -33,7 +33,7 @@ function ItemBloco({ id, bloco, index, desativado }) {
     transition,
     zIndex: isDragging ? 50 : 1,
     opacity: isDragging ? 0.6 : 1,
-    touchAction: 'none', // Evita o comportamento padrão de toque durante o arrasto
+    touchAction: 'none', // Evita scroll ao arrastar no mobile
   };
 
   return (
@@ -61,35 +61,7 @@ function ItemBloco({ id, bloco, index, desativado }) {
 
 export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena }) {
   
-  // 1. Processa apenas os blocos embaralhados (que podem precisar de quebra por vírgula)
-  const processarBlocosEmbaralhados = (dados) => {
-    if (!dados) return [];
-    if (Array.isArray(dados)) {
-      return dados.flatMap((b, idx) => {
-        if (typeof b === 'string') {
-          const textoLimpo = b.trim();
-          const temAgrupamento = 
-            (textoLimpo.includes('[') && textoLimpo.includes(']')) || 
-            (textoLimpo.includes('{') && textoLimpo.includes('}')) || 
-            (textoLimpo.includes('(') && textoLimpo.includes(')'));
-
-          if (temAgrupamento) {
-            return { id: `bloco-emb-${idx}`, texto: textoLimpo };
-          }
-
-          if (textoLimpo.includes(',')) {
-            return textoLimpo.split(',').map((item, subIdx) => ({ id: `bloco-emb-${idx}-${subIdx}`, texto: item.trim() }));
-          }
-
-          return { id: `bloco-emb-${idx}`, texto: textoLimpo };
-        }
-        return { id: `bloco-emb-${idx}`, texto: String(b).trim() };
-      });
-    }
-    return [];
-  };
-
-  // 2. Processa o gabarito de forma limpa, garantindo que cada linha do banco seja um bloco exato
+  // Função para processar o gabarito oficial cadastrado no Supabase
   const processarGabarito = (dados) => {
     if (!dados) return [];
     if (Array.isArray(dados)) {
@@ -101,15 +73,29 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     return [];
   };
 
-  const [blocosUsuario, setBlocosUsuario] = useState(() => processarBlocosEmbaralhados(cena.blocos_embaralhados));
+  // Algoritmo para embaralhar os blocos automaticamente de forma randômica
+  const embaralharArray = (array) => {
+    const arr = [...array.map((item, idx) => ({ ...item, id: `bloco-emb-${idx}` }))];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    // Garante que não venha embaralhado exatamente na ordem certa por coincidência (se houver mais de 1 item)
+    if (JSON.stringify(arr.map(x => x.texto)) === JSON.stringify(array.map(x => x.texto)) && array.length > 1) {
+      return embaralharArray(array);
+    }
+    return arr;
+  };
+
   const gabaritoProcessado = processarGabarito(cena.gabarito);
+  const [blocosUsuario, setBlocosUsuario] = useState(() => embaralharArray(gabaritoProcessado));
 
   const [tentativas, setTentativas] = useState(0);
   const [feedback, setFeedback] = useState('');
   const [bloqueado, setBloqueado] = useState(false);
   const [rankingRodada, setRankingRodada] = useState([]);
   
-  // Estados para controle do Vídeo Interativo, Som e Congelamento
+  // Estados para controle de vídeo e tempo
   const videoRef = useRef(null);
   const [currentVideoSrc, setCurrentVideoSrc] = useState(cena.imagem_url);
   const [videoPausadoPorTempo, setVideoPausadoPorTempo] = useState(false);
@@ -155,8 +141,8 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { 
       activationConstraint: { 
-        delay: 200, // Pequeno atraso para diferenciar o toque de scroll do toque de arrastar
-        tolerance: 8  // Tolerância em pixels antes de ativar o arrasto
+        delay: 200, 
+        tolerance: 8 
       } 
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -196,9 +182,10 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   const validarResposta = async () => {
     if (bloqueado || !desafioLiberado) return;
 
-    // Normaliza removendo espaços duplicados para evitar falso erro
-    const usuarioTextos = blocosUsuario.map(b => b.texto.replace(/\s+/g, ' ').trim());
-    const gabaritoTextos = gabaritoProcessado.map(g => g.texto.replace(/\s+/g, ' ').trim());
+    // Compara diretamente o texto exato arrastado pelo usuário com o gabarito oficial
+    const usuarioTextos = blocosUsuario.map(b => b.texto);
+    const gabaritoTextos = gabaritoProcessado.map(g => g.texto);
+    
     const eIgual = JSON.stringify(usuarioTextos) === JSON.stringify(gabaritoTextos);
 
     if (eIgual) {
@@ -233,8 +220,8 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         setIsMuted(false);
         setCurrentVideoSrc(cena.video_sucesso_url);
         setDesafioLiberado(false);
-        setReproduzindoDesfecho(true); // <--- Ativa o modo desfecho
-        videoRef.current.play();       
+        setReproduzindoDesfecho(true);
+        videoRef.current.play();      
       } else {
         setTimeout(() => {
           onProximaCena();
@@ -248,7 +235,8 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
       if (novasTentativas >= 3) {
         setBloqueado(true);
         setFeedback('❌ Tentativas esgotadas! Aplicando a resposta correta...');
-        setBlocosUsuario(gabaritoProcessado);
+        // Preenche com o gabarito oficial em ordem correta
+        setBlocosUsuario(gabaritoProcessado.map((g, i) => ({ id: `gab-res-${i}`, texto: g.texto })));
 
         if (cena.video_falha_url && videoRef.current) {
           setIsMuted(false);
@@ -276,7 +264,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   return (
     <div className="w-full h-full flex flex-col md:flex-row bg-slate-950 text-slate-100 p-2 md:p-4 gap-3 overflow-y-auto md:overflow-hidden box-border">
       
-      {/* 1ª BLOCO (Mobile: Topo / Desktop: Esquerda 30%): Enredo e Blocos de Desafio */}
+      {/* 1ª COLUNA: Enredo e Blocos de Desafio */}
       <div className="w-full md:w-[30%] h-auto md:h-full bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-col justify-between shadow-xl shrink-0">
         <div>
           <div className="flex justify-between items-center mb-1.5">
@@ -288,7 +276,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
           </p>
         </div>
 
-        {/* Área de blocos arrastáveis (Totalmente visível e adaptável) */}
+        {/* Área de blocos arrastáveis */}
         <div className={`p-2.5 rounded-lg border flex flex-col my-2 transition-all flex-1 min-h-[160px] max-h-[220px] md:max-h-none overflow-hidden ${
           !desafioLiberado ? 'bg-slate-950/40 border-slate-900 opacity-60' : 'bg-slate-950 border-slate-800'
         }`}>
@@ -339,7 +327,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         </div>
       </div>
 
-      {/* 2ª BLOCO (Mobile: Meio / Desktop: Centro 50%): Mídia em Destaque */}
+      {/* 2ª COLUNA: Mídia em Destaque */}
       <div className="w-full md:w-[50%] h-56 md:h-full bg-slate-900 border border-slate-800 rounded-xl p-2 md:p-3 flex items-center justify-center shadow-xl overflow-hidden shrink-0">
         <div className="w-full h-full rounded-lg overflow-hidden bg-black flex items-center justify-center border border-slate-800 relative">
           {ehVideo ? (
@@ -354,7 +342,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={() => {
                   if (reproduzindoDesfecho) {
-                    onProximaCena(); // Avança assim que o vídeo de desfecho acabar de falar!
+                    onProximaCena();
                   } else {
                     handleVideoEnded();
                   }
@@ -379,7 +367,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         </div>
       </div>
 
-      {/* 3ª BLOCO (Mobile: Base / Desktop: Direita 20%): Placar ao Vivo */}
+      {/* 3ª COLUNA: Placar ao Vivo */}
       <div className="w-full md:w-[20%] h-36 md:h-full bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col shadow-xl overflow-hidden shrink-0">
         <h3 className="text-xs font-bold text-amber-400 mb-2 pb-1.5 border-b border-slate-800 text-center">
           🏆 Placar da Turma
