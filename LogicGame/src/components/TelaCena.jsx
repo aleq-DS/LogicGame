@@ -312,13 +312,13 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
             <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold">Cena {cena.numero_cena}</span>
             <span className="text-xs text-slate-400 font-mono">Tentativas: {tentativas}/3</span>
           </div>
-          <p className="text-slate-300 text-xs leading-relaxed mb-2 max-h-16 overflow-y-auto">
+          <p className="text-slate-300 text-sm font-bold leading-relaxed mb-2 max-h-16 overflow-y-auto">
             {cena.enredo_text || cena.enredo_texto}
           </p>
 
           {/* Indicador Visual do Cronômetro Regressivo */}
           {desafioLiberado && !bloqueado && (
-            <div className={`my-1.5 py-1 px-2 rounded text-xs font-mono font-bold text-center border ${
+            <div className={`my-1.5 py-1 px-2 rounded text-sm font-mono font-bold text-center border ${
               tempoRestante <= 5 
                 ? 'bg-red-950/60 border-red-800 text-red-400 animate-pulse' 
                 : 'bg-slate-950 border-slate-800 text-amber-400'
