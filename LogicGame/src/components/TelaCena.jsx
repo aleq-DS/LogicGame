@@ -92,10 +92,14 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   const [bloqueado, setBloqueado] = useState(false);
   const [rankingRodada, setRankingRodada] = useState([]);
   
-  // Controle de Tempo e Cronômetro Regressivo (15 segundos por desafio)
-  const TEMPO_LIMITE = 15;
+  // Controle de Tempo e Cronômetro Regressivo (Lê o tempo_limite cadastrado no Supabase ou padrão 15s)
+  const TEMPO_LIMITE = cena.tempo_limite || 15;
   const [tempoRestante, setTempoRestante] = useState(TEMPO_LIMITE);
   const [cronometroAtivo, setCronometroAtivo] = useState(false);
+  
+  // Estado de suspense sincronizado (aguardando o tempo acabar para revelar o resultado)
+  const [respostaEnviadaAguardando, setRespostaEnviadaAguardando] = useState(false);
+  const [resultadoAcertoTemp, setResultadoAcertoTemp] = useState(null);
 
   // Estados de Vídeo
   const videoRef = useRef(null);
@@ -145,7 +149,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     }
   }, [desafioLiberado, bloqueado, cronometroAtivo]);
 
-  // Lógica do temporizador regressivo
+  // Lógica do temporizador regressivo sincronizado
   useEffect(() => {
     let timer = null;
     if (cronometroAtivo && tempoRestante > 0 && !bloqueado) {
@@ -153,7 +157,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         setTempoRestante((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
-            tratarTempoEsgotado();
+            finalizarRodadaTempoEsgotado();
             return 0;
           }
           return prev - 1;
@@ -163,13 +167,57 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     return () => clearInterval(timer);
   }, [cronometroAtivo, tempoRestante, bloqueado]);
 
-  const tratarTempoEsgotado = () => {
-    if (bloqueado) return;
+  // Chamado quando o tempo da rodada esgota para todos na turma
+  const finalizarRodadaTempoEsgotado = async () => {
     setBloqueado(true);
     setCronometroAtivo(false);
-    setFeedback('⏱️ Tempo esgotado! 0 pontos nesta fase.');
 
-    if (cena.video_falha_url && videoRef.current) {
+    // Se o usuário já tinha respondido antes do tempo acabar
+    if (respostaEnviadaAguardando) {
+      if (resultadoAcertoTemp) {
+        // ACERTOU: Calcula pontuação com base no tempo em que enviou
+        const pontosBase = 50;
+        const pontosGanhos = pontosBase + (pontosBase * tempoRestante);
+        setFeedback(`🎉 Acertou! 😎 Restavam ${tempoRestante}s. +${pontosGanhos} pts!`);
+
+        if (participanteId) {
+          try {
+            const { data: partAtual } = await supabase
+              .from('participantes')
+              .select('pontos')
+              .eq('id', participanteId)
+              .single();
+
+            const pontosAtuais = partAtual?.pontos || 0;
+            await supabase
+              .from('participantes')
+              .update({ pontos: pontosAtuais + pontosGanhos })
+              .eq('id', participanteId);
+          } catch (err) {
+            console.error('Erro ao atualizar pontuação:', err);
+          }
+        }
+
+        if (cena.video_sucesso_url && videoRef.current) {
+          setIsMuted(false);
+          setCurrentVideoSrc(cena.video_sucesso_url);
+          setDesafioLiberado(false);
+          setReproduzindoDesfecho(true);
+          videoRef.current.play();
+          return;
+        }
+      } else {
+        // ERROU na tentativa prévia
+        setFeedback('❌ Errou! 😔 0 pontos nesta fase.');
+      }
+    } else {
+      // ESTOUROU O TEMPO sem responder ou tentou errado
+      setFeedback('⏱️ Tempo esgotado! 0 pontos nesta fase.');
+      setBlocosUsuario(gabaritoProcessado.map((g, i) => ({ id: `gab-res-${i}`, texto: g.texto })));
+    }
+
+    // Avança para a próxima cena após revelar o resultado
+    if (cena.video_falha_url && videoRef.current && (!resultadoAcertoTemp || tentativas >= 3)) {
       setIsMuted(false);
       setCurrentVideoSrc(cena.video_falha_url);
       setDesafioLiberado(false);
@@ -180,7 +228,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
     } else {
       setTimeout(() => {
         onProximaCena();
-      }, 2500);
+      }, 3000);
     }
   };
 
@@ -191,7 +239,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   );
 
   const handleDragEnd = (event) => {
-    if (bloqueado || !desafioLiberado) return;
+    if (bloqueado || !desafioLiberado || respostaEnviadaAguardando) return;
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -222,81 +270,30 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
   };
 
   const validarResposta = async () => {
-    if (bloqueado || !desafioLiberado) return;
+    if (bloqueado || !desafioLiberado || respostaEnviadaAguardando) return;
 
-    setCronometroAtivo(false);
     const usuarioTextos = blocosUsuario.map(b => b.texto);
     const gabaritoTextos = gabaritoProcessado.map(g => g.texto);
     
     const eIgual = JSON.stringify(usuarioTextos) === JSON.stringify(gabaritoTextos);
 
     if (eIgual) {
-      setBloqueado(true);
-
-      // Pontuação proporcional ao tempo restante: Base 50 + (50 * tempoRestante)
-      const pontosBase = 50;
-      const pontosGanhos = pontosBase + (pontosBase * tempoRestante);
-
-      setFeedback(`🎉 Excelente! Restaram ${tempoRestante}s. +${pontosGanhos} pts!`);
-
-      if (participanteId) {
-        try {
-          const { data: partAtual } = await supabase
-            .from('participantes')
-            .select('pontos')
-            .eq('id', participanteId)
-            .single();
-
-          const pontosAtuais = partAtual?.pontos || 0;
-          const novosPontosTotais = pontosAtuais + pontosGanhos;
-
-          await supabase
-            .from('participantes')
-            .update({ pontos: novosPontosTotais })
-            .eq('id', participanteId);
-        } catch (err) {
-          console.error('Erro ao atualizar pontuação:', err);
-        }
-      }
-
-      if (cena.video_sucesso_url && videoRef.current) {
-        setIsMuted(false);
-        setCurrentVideoSrc(cena.video_sucesso_url);
-        setDesafioLiberado(false);
-        setReproduzindoDesfecho(true);
-        videoRef.current.play();      
-      } else {
-        setTimeout(() => {
-          onProximaCena();
-        }, 1500);
-      }
-
+      // Resposta correta! Entra em modo de suspense até o tempo da rodada acabar
+      setRespostaEnviadaAguardando(true);
+      setResultadoAcertoTemp(true);
+      setFeedback('⏳ Resposta registrada! 😎 Aguardando o encerramento do tempo da rodada...');
     } else {
       const novasTentativas = tentativas + 1;
       setTentativas(novasTentativas);
 
       if (novasTentativas >= 3) {
-        setBloqueado(true);
-        setCronometroAtivo(false);
-        setFeedback('❌ Tentativas esgotadas! 0 pontos nesta fase.');
+        // Esgotou as tentativas antes do tempo
+        setRespostaEnviadaAguardando(true);
+        setResultadoAcertoTemp(false);
+        setFeedback('❌ Tentativas esgotadas! 😔 Aguardando o fim da rodada...');
         setBlocosUsuario(gabaritoProcessado.map((g, i) => ({ id: `gab-res-${i}`, texto: g.texto })));
-
-        if (cena.video_falha_url && videoRef.current) {
-          setIsMuted(false);
-          setCurrentVideoSrc(cena.video_falha_url);
-          setDesafioLiberado(false);
-          videoRef.current.play();
-          setTimeout(() => {
-            onProximaCena();
-          }, 4000);
-        } else {
-          setTimeout(() => {
-            onProximaCena();
-          }, 3500);
-        }
       } else {
         setFeedback(`⚠️ Ops! Sequência incorreta. Tentativa ${novasTentativas} de 3.`);
-        setCronometroAtivo(true); // Retoma o cronômetro para a nova tentativa
         if (videoRef.current && videoPausadoPorTempo) {
           videoRef.current.play();
           setVideoPausadoPorTempo(false);
@@ -333,11 +330,11 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
 
         {/* Área de blocos arrastáveis */}
         <div className={`p-2.5 rounded-lg border flex flex-col my-1.5 transition-all flex-1 min-h-[150px] max-h-[210px] md:max-h-none overflow-hidden ${
-          !desafioLiberado ? 'bg-slate-950/40 border-slate-900 opacity-60' : 'bg-slate-950 border-slate-800'
+          !desafioLiberado || respostaEnviadaAguardando ? 'bg-slate-950/40 border-slate-900 opacity-60' : 'bg-slate-950 border-slate-800'
         }`}>
           <div className="flex items-center justify-between mb-1.5 shrink-0">
             <p className="text-[11px] text-amber-400 font-mono">
-              {!desafioLiberado ? '🔒 Assista ao vídeo para liberar:' : '💡 Arraste os blocos na ordem correta:'}
+              {!desafioLiberado ? '🔒 Assista ao vídeo para liberar:' : respostaEnviadaAguardando ? '⏳ Resposta enviada. Aguardando turma...' : '💡 Arraste os blocos na ordem correta:'}
             </p>
           </div>
 
@@ -346,7 +343,7 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
               <SortableContext items={blocosUsuario.map(b => b.id)} strategy={verticalListSortingStrategy}>
                 <div className="space-y-1.5">
                   {blocosUsuario.map((item, index) => (
-                    <ItemBloco key={item.id} id={item.id} bloco={item.texto} index={index} desativado={!desafioLiberado || bloqueado} />
+                    <ItemBloco key={item.id} id={item.id} bloco={item.texto} index={index} desativado={!desafioLiberado || bloqueado || respostaEnviadaAguardando} />
                   ))}
                 </div>
               </SortableContext>
@@ -358,15 +355,16 @@ export default function TelaCena({ cena, sessaoId, participanteId, onProximaCena
         <div className="space-y-2 shrink-0 mt-2">
           {feedback && (
             <div className={`p-2 rounded text-[11px] text-center font-semibold ${
-              bloqueado && tentativas >= 3 ? 'bg-red-950/80 border border-red-800 text-red-200' : 
-              bloqueado ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-200' : 
+              bloqueado && resultadoAcertoTemp ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-200' : 
+              bloqueado ? 'bg-red-950/80 border border-red-800 text-red-200' : 
+              respostaEnviadaAguardando ? 'bg-blue-950/80 border border-blue-800 text-blue-200 animate-pulse' :
               'bg-slate-800 border border-slate-700 text-amber-300'
             }`}>
               {feedback}
             </div>
           )}
 
-          {!bloqueado && (
+          {!bloqueado && !respostaEnviadaAguardando && (
             <button 
               onClick={validarResposta}
               disabled={!desafioLiberado}

@@ -18,6 +18,7 @@ export default function PainelAdmin({ onVoltar }) {
 
   const [enredoSelecionadoId, setEnredoSelecionadoId] = useState('');
   const [numeroCena, setNumeroCena] = useState(1);
+  const [tempoLimiteCena, setTempoLimiteCena] = useState('15'); // Novo campo de tempo limite por cena
   const [enredoTexto, setEnredoTexto] = useState('');
   const [imagemCenaUrl, setImagemCenaUrl] = useState('');
   const [enviandoArquivo, setEnviandoArquivo] = useState(false);
@@ -203,6 +204,7 @@ export default function PainelAdmin({ onVoltar }) {
     const { error } = await supabase.from('cenas').insert([{
       enredo_id: enredoSelecionadoId,
       numero_cena: parseInt(numeroCena),
+      tempo_limite: parseInt(tempoLimiteCena) || 15,
       enredo_texto: enredoTexto,
       imagem_url: imagemCenaUrl,
       tempo_pausa: tempoPausa ? parseFloat(tempoPausa) : 0,
@@ -274,6 +276,23 @@ export default function PainelAdmin({ onVoltar }) {
     }
   };
 
+  const handleEncerrarPartida = async () => {
+    if (!salaSelecionadaMonitor) return;
+    if (!window.confirm('Tem certeza que deseja encerrar esta partida imediatamente?')) return;
+
+    const { error } = await supabase
+      .from('sessoes')
+      .update({ status: 'encerrada', iniciada: false })
+      .eq('id', salaSelecionadaMonitor);
+
+    if (error) {
+      alert('Erro ao encerrar partida: ' + error.message);
+    } else {
+      alert('🛑 Partida encerrada com sucesso!');
+      carregarDadosBase();
+    }
+  };
+
   return (
     <div className="max-w-4xl w-full bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl text-slate-100 my-auto">
       <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-800">
@@ -327,7 +346,6 @@ export default function PainelAdmin({ onVoltar }) {
                   className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-white h-16"
                 />
                 
-                {/* Upload de Capa via Imagem */}
                 <div className="bg-slate-900 p-2.5 border border-dashed border-slate-700 rounded">
                   <label className="block text-[10px] text-amber-400 mb-1 font-bold">Capa do Enredo (Enviar Imagem .png / .jpg):</label>
                   <input 
@@ -338,7 +356,6 @@ export default function PainelAdmin({ onVoltar }) {
                   {capaUrl && <p className="text-[10px] text-emerald-400 mt-1 truncate">✔️ Capa carregada com sucesso</p>}
                 </div>
 
-                {/* Vídeo do Lobby (Pré-Partida) */}
                 <div className="bg-slate-900 p-2.5 border border-dashed border-slate-700 rounded space-y-1">
                   <label className="block text-[10px] text-amber-400 font-bold">Vídeo do Lobby (.mp4 Pré-Partida):</label>
                   <input 
@@ -352,7 +369,6 @@ export default function PainelAdmin({ onVoltar }) {
                   {enviandoVideoLobby && <p className="text-[10px] text-amber-300 animate-pulse">Enviando vídeo do lobby...</p>}
                 </div>
 
-                {/* Vídeo de Espera (Pós-Jogo) */}
                 <div className="bg-slate-900 p-2.5 border border-dashed border-slate-700 rounded space-y-1">
                   <label className="block text-[10px] text-amber-400 font-bold">Vídeo de Espera (.mp4 Pós-Jogo):</label>
                   <input 
@@ -406,17 +422,29 @@ export default function PainelAdmin({ onVoltar }) {
               </select>
 
               <div className="flex gap-2">
-                <input 
-                  type="number" placeholder="Nº Cena" value={numeroCena} onChange={e => setNumeroCena(e.target.value)} 
-                  className="w-24 p-2 bg-slate-900 border border-slate-700 rounded text-white" required
-                />
-                <input 
-                  type="text" placeholder="URL da Mídia Principal ou faça o upload" value={imagemCenaUrl} onChange={e => setImagemCenaUrl(e.target.value)} 
-                  className="flex-1 p-2 bg-slate-900 border border-slate-700 rounded text-white" required
-                />
+                <div className="w-24">
+                  <label className="block text-[10px] text-slate-400 mb-1">Nº Cena</label>
+                  <input 
+                    type="number" placeholder="Nº" value={numeroCena} onChange={e => setNumeroCena(e.target.value)} 
+                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-white" required
+                  />
+                </div>
+                <div className="w-28">
+                  <label className="block text-[10px] text-amber-400 mb-1 font-bold">Tempo Limite (s)</label>
+                  <input 
+                    type="number" placeholder="Ex: 15" value={tempoLimiteCena} onChange={e => setTempoLimiteCena(e.target.value)} 
+                    className="w-full p-2 bg-slate-900 border border-amber-600/60 rounded text-white font-mono" required
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[10px] text-slate-400 mb-1">URL da Mídia</label>
+                  <input 
+                    type="text" placeholder="URL ou upload abaixo" value={imagemCenaUrl} onChange={e => setImagemCenaUrl(e.target.value)} 
+                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded text-white" required
+                  />
+                </div>
               </div>
 
-              {/* Upload Mídia Principal */}
               <div className="bg-slate-900 p-2 border border-dashed border-slate-700 rounded">
                 <label className="block text-[10px] text-amber-400 mb-1 font-bold">Upar Mídia Principal (.mp4, gif, imagem):</label>
                 <input 
@@ -426,7 +454,6 @@ export default function PainelAdmin({ onVoltar }) {
                 {enviandoArquivo && <p className="text-[10px] text-amber-300 mt-1 animate-pulse">Enviando vídeo principal...</p>}
               </div>
 
-              {/* Controles do Vídeo Interativo (Pausa, Sucesso e Falha) */}
               <div className="bg-slate-900/60 p-3 rounded border border-slate-800 space-y-2">
                 <span className="text-[11px] font-bold text-amber-400 block">🎬 Configuração de Vídeo Interativo (Opcional):</span>
                 
@@ -440,12 +467,10 @@ export default function PainelAdmin({ onVoltar }) {
 
                 <div>
                   <label className="block text-[10px] text-slate-400 mb-1">Vídeo de Sucesso (após acertar):</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" placeholder="URL do vídeo de sucesso" value={videoSucessoUrl} onChange={e => setVideoSucessoUrl(e.target.value)} 
-                      className="flex-1 p-1.5 bg-slate-900 border border-slate-700 rounded text-white text-[11px]"
-                    />
-                  </div>
+                  <input 
+                    type="text" placeholder="URL do vídeo de sucesso" value={videoSucessoUrl} onChange={e => setVideoSucessoUrl(e.target.value)} 
+                    className="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-white text-[11px]"
+                  />
                   <input 
                     type="file" accept="video/mp4" onChange={(e) => handleFileUpload(e, setVideoSucessoUrl, setEnviandoSucesso)} 
                     className="w-full text-[10px] text-slate-400 mt-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:bg-emerald-600 file:text-slate-950 cursor-pointer"
@@ -455,12 +480,10 @@ export default function PainelAdmin({ onVoltar }) {
 
                 <div>
                   <label className="block text-[10px] text-slate-400 mb-1">Vídeo de Falha (após 3 erros):</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" placeholder="URL do vídeo de falha" value={videoFalhaUrl} onChange={e => setVideoFalhaUrl(e.target.value)} 
-                      className="flex-1 p-1.5 bg-slate-900 border border-slate-700 rounded text-white text-[11px]"
-                    />
-                  </div>
+                  <input 
+                    type="text" placeholder="URL do vídeo de falha" value={videoFalhaUrl} onChange={e => setVideoFalhaUrl(e.target.value)} 
+                    className="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-white text-[11px]"
+                  />
                   <input 
                     type="file" accept="video/mp4" onChange={(e) => handleFileUpload(e, setVideoFalhaUrl, setEnviandoFalha)} 
                     className="w-full text-[10px] text-slate-400 mt-1 file:py-0.5 file:px-2 file:rounded file:border-0 file:bg-red-600 file:text-white cursor-pointer"
@@ -571,11 +594,19 @@ export default function PainelAdmin({ onVoltar }) {
             </div>
 
             {salaSelecionadaMonitor && (
-              <div>
+              <div className="flex gap-2">
                 {salaInfo?.iniciada ? (
-                  <span className="px-4 py-2 bg-emerald-950 border border-emerald-800 text-emerald-300 rounded-lg text-xs font-bold block text-center">
-                    🟢 Partida em Andamento
-                  </span>
+                  <>
+                    <span className="px-3 py-2 bg-emerald-950 border border-emerald-800 text-emerald-300 rounded-lg text-xs font-bold flex items-center">
+                      🟢 Em Andamento
+                    </span>
+                    <button 
+                      onClick={handleEncerrarPartida}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs tracking-wide shadow-lg transition cursor-pointer"
+                    >
+                      🛑 Encerrar Partida
+                    </button>
+                  </>
                 ) : (
                   <button 
                     onClick={handleIniciarPartida}
@@ -590,7 +621,7 @@ export default function PainelAdmin({ onVoltar }) {
 
           <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
             <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center justify-between">
-              <span>Participantes Conectados no Lobby 🟢</span>
+              <span>Participantes Conectados 🟢</span>
               <span className="text-xs font-normal text-slate-400">Total: {participantesAoVivo.length} aluno(s)</span>
             </h3>
 
@@ -605,7 +636,7 @@ export default function PainelAdmin({ onVoltar }) {
                       <span className="text-xl">{p.avatar}</span>
                       <div>
                         <span className="font-bold text-white">{p.nickname}</span>
-                        <p className="text-[10px] text-slate-400">Status: Conectado no Lobby</p>
+                        <p className="text-[10px] text-slate-400">Pontos: {p.pontos || 0}</p>
                       </div>
                     </div>
                     <div>
